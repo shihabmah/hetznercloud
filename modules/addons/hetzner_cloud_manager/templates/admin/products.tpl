@@ -72,3 +72,39 @@
     </table>
     <?php endif; ?>
 </div>
+
+<div class="hcm-card">
+    <div style="display:flex; justify-content:space-between; align-items:center;">
+        <h4 style="margin-top:0;">💱 Managed Products &amp; Pricing Sync</h4>
+        <form method="post" action="<?= hcm_e($module_link) ?>&tab=products">
+            <input type="hidden" name="product_action" value="sync_pricing">
+            <button type="submit" style="border:none; background:#14804a; color:#fff; padding:7px 14px; border-radius:4px; cursor:pointer; font-size:12px;">🔄 Sync All Pricing to WHMCS</button>
+        </form>
+    </div>
+    <p style="color:#718096; font-size:13px;">Converts Hetzner's live net-EUR cost into every active WHMCS currency using current exchange rates and each product's markup %, then writes the result into every billing cycle in tblpricing.</p>
+
+    <table class="hcm-table">
+        <thead><tr><th>Product</th><th>Server Type</th><th>Markup %</th><th>Visibility</th><th>Last Synced</th><th>Action</th></tr></thead>
+        <tbody>
+        <?php foreach (($managed_products ?? []) as $mp): ?>
+            <tr>
+                <td><?= hcm_e($mp->product_name) ?></td>
+                <td><?= hcm_e($mp->server_type) ?></td>
+                <td><?= number_format((float) $mp->base_server_markup_pct, 2) ?>%</td>
+                <td><?= $mp->hidden ? '<span class="hcm-badge warn">Hidden</span>' : '<span class="hcm-badge ok">Visible</span>' ?></td>
+                <td><?= hcm_e($mp->updated_at) ?></td>
+                <td>
+                    <form method="post" action="<?= hcm_e($module_link) ?>&tab=products" style="display:inline;">
+                        <input type="hidden" name="product_action" value="sync_pricing">
+                        <input type="hidden" name="sync_product_id" value="<?= (int) $mp->product_id ?>">
+                        <button type="submit" style="border:1px solid #ccd2db; background:#fff; padding:3px 8px; border-radius:4px; cursor:pointer; font-size:11px;">Sync Now</button>
+                    </form>
+                </td>
+            </tr>
+        <?php endforeach; ?>
+        <?php if (empty($managed_products)): ?>
+            <tr><td colspan="6" style="text-align:center; color:#718096;">No products imported yet. Use the importer above.</td></tr>
+        <?php endif; ?>
+        </tbody>
+    </table>
+</div>

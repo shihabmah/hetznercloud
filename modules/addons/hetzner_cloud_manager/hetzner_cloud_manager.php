@@ -152,6 +152,7 @@ function hetzner_cloud_manager_output($vars)
                     'selected_account_id' => $selectedAccountId,
                     'server_types' => $selectedAccountId ? ProductsController::listImportableServerTypes($selectedAccountId) : [],
                     'product_groups' => ProductsController::listProductGroups(),
+                    'managed_products' => ProductsController::listManagedProducts(),
                 ]);
                 break;
 

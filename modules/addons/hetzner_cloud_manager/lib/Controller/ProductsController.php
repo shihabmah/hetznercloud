@@ -29,12 +29,40 @@ class ProductsController
             switch ($action) {
                 case 'import':
                     return self::importServerType($post);
+                case 'sync_pricing':
+                    return self::syncPricing($post);
                 default:
                     return ['status' => 'error', 'message' => 'Unknown product action.'];
             }
         } catch (Exception $e) {
             return ['status' => 'error', 'message' => $e->getMessage()];
         }
+    }
+
+    /**
+     * Manual trigger for \HetznerCloudManager\Controller\PricingSync,
+     * either for a single product or for every product with a markup
+     * rule configured.
+     */
+    protected static function syncPricing(array $post): array
+    {
+        $productId = (int) ($post['sync_product_id'] ?? 0);
+
+        if ($productId > 0) {
+            $result = \HetznerCloudManager\Controller\PricingSync::syncProduct($productId);
+            return $result['status'] === 'success'
+                ? ['status' => 'success', 'message' => "Pricing synced for '{$result['product_name']}' (base cost €{$result['base_cost_eur']}/mo)."]
+                : ['status' => 'error', 'message' => $result['message']];
+        }
+
+        $results = \HetznerCloudManager\Controller\PricingSync::syncAll();
+        $successCount = count(array_filter($results, fn ($r) => $r['status'] === 'success'));
+        $errorCount = count($results) - $successCount;
+
+        return [
+            'status' => $errorCount > 0 && $successCount === 0 ? 'error' : 'success',
+            'message' => "Pricing sync complete: {$successCount} product(s) updated" . ($errorCount ? ", {$errorCount} failed" : '') . '.',
+        ];
     }
 
     /**
@@ -269,5 +297,27 @@ class ProductsController
     public static function listProductGroups(): array
     {
         return Capsule::table('tblproductgroups')->orderBy('order')->get()->all();
+    }
+
+    /**
+     * Every product already wired to this module (has a markup rule),
+     * joined with its tblproducts name/hidden status, for the "Managed
+     * Products" pricing sync table.
+     */
+    public static function listManagedProducts(): array
+    {
+        return Capsule::table('mod_hetzner_cloud_markup_rules')
+            ->join('tblproducts', 'tblproducts.id', '=', 'mod_hetzner_cloud_markup_rules.product_id')
+            ->select(
+                'tblproducts.id as product_id',
+                'tblproducts.name as product_name',
+                'tblproducts.hidden',
+                'tblproducts.configoption2 as server_type',
+                'mod_hetzner_cloud_markup_rules.base_server_markup_pct',
+                'mod_hetzner_cloud_markup_rules.updated_at'
+            )
+            ->orderBy('tblproducts.name')
+            ->get()
+            ->all();
     }
 }

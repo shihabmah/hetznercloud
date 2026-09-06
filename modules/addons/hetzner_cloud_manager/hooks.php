@@ -21,12 +21,16 @@ require_once __DIR__ . '/autoload.php';
 
 use HetznerCloudManager\Api\HetznerClient;
 use HetznerCloudManager\Api\StockAvailability;
+use HetznerCloudManager\Controller\PricingSync;
+use HetznerCloudManager\Helpers\MetricBilling;
+use HetznerCloudManager\Database\Schema;
 use WHMCS\Database\Capsule;
 
 /**
- * Daily housekeeping: refresh live stock cache for every active account
- * and prune activity log entries older than 90 days. Pricing sync itself
- * is triggered separately from PricingSync::runScheduled() (Phase 4).
+ * Daily housekeeping: refresh live stock cache for every active account,
+ * run the pricing sync engine (throttled to the configured interval so a
+ * daily cron doesn't need to mean a daily price recompute), run metric
+ * overage billing, and prune activity log entries older than 90 days.
  */
 add_hook('DailyCronJob', 1, function ($vars) {
     $accounts = Capsule::table('mod_hetzner_cloud_accounts')->where('is_active', 1)->get();
@@ -39,6 +43,34 @@ add_hook('DailyCronJob', 1, function ($vars) {
         } catch (\Exception $e) {
             logActivity('Hetzner Cloud Manager: stock refresh failed for account ' . $account->account_name . ' - ' . $e->getMessage());
         }
+    }
+
+    // Throttle pricing sync to the configured interval (default 12h) by
+    // tracking the last run timestamp in mod_hetzner_cloud_settings.
+    $intervalHours = (int) Schema::getSetting('pricing_sync_interval_h', 12);
+    $lastRun = Schema::getSetting('pricing_sync_last_run_at');
+    $dueForSync = !$lastRun || (time() - strtotime($lastRun)) >= ($intervalHours * 3600);
+
+    if ($dueForSync) {
+        try {
+            foreach (PricingSync::syncAll() as $result) {
+                if ($result['status'] === 'error') {
+                    logActivity('Hetzner Cloud Manager: pricing sync failed for product #' . $result['product_id'] . ' - ' . $result['message']);
+                }
+            }
+            Schema::setSetting('pricing_sync_last_run_at', date('Y-m-d H:i:s'));
+        } catch (\Exception $e) {
+            logActivity('Hetzner Cloud Manager: pricing sync run failed - ' . $e->getMessage());
+        }
+    }
+
+    try {
+        $billingSummary = MetricBilling::runDaily();
+        foreach ($billingSummary['errors'] as $error) {
+            logActivity('Hetzner Cloud Manager: metric billing - ' . $error);
+        }
+    } catch (\Exception $e) {
+        logActivity('Hetzner Cloud Manager: metric billing run failed - ' . $e->getMessage());
     }
 
     Capsule::table('mod_hetzner_cloud_activity_log')
