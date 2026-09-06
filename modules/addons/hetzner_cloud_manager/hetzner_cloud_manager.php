@@ -23,6 +23,7 @@ use HetznerCloudManager\Controller\ServersController;
 use HetznerCloudManager\Controller\ProductsController;
 use HetznerCloudManager\Controller\ResourcesController;
 use HetznerCloudManager\Controller\SnapshotsController;
+use HetznerCloudManager\Helpers\EmailTemplates;
 use HetznerCloudManager\View\TemplateRenderer;
 use WHMCS\Database\Capsule;
 
@@ -54,6 +55,11 @@ function hetzner_cloud_manager_activate()
 {
     try {
         $actions = Schema::migrate();
+        $emailTemplates = EmailTemplates::install();
+
+        if (!empty($emailTemplates)) {
+            $actions[] = 'Installed email templates: ' . implode(', ', $emailTemplates);
+        }
 
         return [
             'status' => 'success',

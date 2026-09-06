@@ -328,6 +328,14 @@ function hetzner_cloud_manager_CreateAccount(array $params)
             hetzner_cloud_manager_storeCustomField($serviceId, 'Initial Root Password', $rootPassword);
         }
 
+        hetzner_cloud_manager_sendEmail($serviceId, 'Hetzner Cloud - Server Deployed', [
+            'server_ip' => $server['public_net']['ipv4']['ip'] ?? '',
+            'server_ipv6' => $server['public_net']['ipv6']['network'] ?? '',
+            'server_datacenter' => $server['datacenter']['name'] ?? '',
+            'server_type_name' => $serverType,
+            'server_root_password' => $rootPassword ?? 'Set via your SSH key',
+        ]);
+
         return 'success';
     } catch (\Exception $e) {
         logActivity('Hetzner Cloud Manager CreateAccount failed for service #' . ($params['serviceid'] ?? '?') . ': ' . $e->getMessage());
@@ -613,4 +621,29 @@ function hetzner_cloud_manager_storeCustomField(int $serviceId, string $fieldNam
         ['fieldid' => $field->id, 'relid' => $serviceId],
         ['value' => $value]
     );
+}
+
+/**
+ * Send one of the templates registered by
+ * HetznerCloudManager\Helpers\EmailTemplates::install() via the WHMCS
+ * Local API, merging in the module-specific fields on top of WHMCS's
+ * standard client/service merge fields (which sendemail resolves
+ * automatically from relid/customtype).
+ */
+function hetzner_cloud_manager_sendEmail(int $serviceId, string $templateName, array $mergeFields): void
+{
+    if (!function_exists('localAPI')) {
+        return;
+    }
+
+    try {
+        localAPI('SendEmail', [
+            'messagename' => $templateName,
+            'id' => $serviceId,
+            'customtype' => 'product',
+            'customvars' => base64_encode(serialize($mergeFields)),
+        ]);
+    } catch (\Exception $e) {
+        logActivity("Hetzner Cloud Manager: failed to send '{$templateName}' email for service #{$serviceId} - " . $e->getMessage());
+    }
 }

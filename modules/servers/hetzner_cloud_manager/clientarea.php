@@ -188,6 +188,17 @@ try {
                 hcm_ajax_respond(['status' => 'error', 'message' => 'Rescue mode is disabled for this product.'], 403);
             }
             $result = $client->serverAction($serverId, 'enable_rescue', ['type' => $input['rescue_type'] ?? 'linux64']);
+            if (!empty($result['root_password']) && function_exists('localAPI')) {
+                localAPI('SendEmail', [
+                    'messagename' => 'Hetzner Cloud - Rescue Mode Enabled',
+                    'id' => $serviceId,
+                    'customtype' => 'product',
+                    'customvars' => base64_encode(serialize([
+                        'server_ip' => $instance->ipv4_address,
+                        'rescue_password' => $result['root_password'],
+                    ])),
+                ]);
+            }
             hcm_ajax_respond(['status' => 'success', 'rescue_password' => $result['root_password'] ?? null]);
             break;
 
@@ -208,6 +219,18 @@ try {
                 hcm_ajax_respond(['status' => 'error', 'message' => 'An image must be specified.'], 400);
             }
             $result = $client->serverAction($serverId, 'rebuild', ['image' => $image]);
+            if (!empty($result['root_password']) && function_exists('localAPI')) {
+                localAPI('SendEmail', [
+                    'messagename' => 'Hetzner Cloud - Server Rebuilt',
+                    'id' => $serviceId,
+                    'customtype' => 'product',
+                    'customvars' => base64_encode(serialize([
+                        'server_ip' => $instance->ipv4_address,
+                        'rebuilt_os_name' => $image,
+                        'new_root_password' => $result['root_password'],
+                    ])),
+                ]);
+            }
             hcm_ajax_respond(['status' => 'success', 'root_password' => $result['root_password'] ?? null, 'message' => "Server is being rebuilt with {$image}."]);
             break;
 
