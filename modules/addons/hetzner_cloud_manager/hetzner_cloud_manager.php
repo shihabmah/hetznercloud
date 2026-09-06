@@ -19,7 +19,12 @@ require_once __DIR__ . '/autoload.php';
 use HetznerCloudManager\Database\Schema;
 use HetznerCloudManager\Controller\AccountsController;
 use HetznerCloudManager\Controller\DashboardController;
+use HetznerCloudManager\Controller\ServersController;
+use HetznerCloudManager\Controller\ProductsController;
+use HetznerCloudManager\Controller\ResourcesController;
+use HetznerCloudManager\Controller\SnapshotsController;
 use HetznerCloudManager\View\TemplateRenderer;
+use WHMCS\Database\Capsule;
 
 function hetzner_cloud_manager_config()
 {
@@ -96,6 +101,18 @@ function hetzner_cloud_manager_output($vars)
             case 'accounts':
                 $flash = AccountsController::handlePost($_POST);
                 break;
+            case 'servers':
+                $flash = ServersController::handlePost($_POST);
+                break;
+            case 'products':
+                $flash = ProductsController::handlePost($_POST);
+                break;
+            case 'resources':
+                $flash = ResourcesController::handlePost($_POST);
+                break;
+            case 'snapshots':
+                $flash = SnapshotsController::handlePost($_POST);
+                break;
         }
     }
 
@@ -118,21 +135,38 @@ function hetzner_cloud_manager_output($vars)
 
             case 'servers':
                 echo $renderer->renderPage('servers', 'admin/servers', [
+                    'estate' => ServersController::listEstate(),
                     'orphans' => DashboardController::findOrphanServers(),
                     'stale' => DashboardController::findStaleServices(),
                 ]);
                 break;
 
             case 'products':
-                echo $renderer->renderPage('products', 'admin/products', []);
+                $selectedAccountId = (int) ($_REQUEST['account_id'] ?? 0);
+                $accountsForProducts = Capsule::table('mod_hetzner_cloud_accounts')->where('is_active', 1)->get();
+                if (!$selectedAccountId && $accountsForProducts->isNotEmpty()) {
+                    $selectedAccountId = $accountsForProducts->first()->id;
+                }
+                echo $renderer->renderPage('products', 'admin/products', [
+                    'accounts' => $accountsForProducts,
+                    'selected_account_id' => $selectedAccountId,
+                    'server_types' => $selectedAccountId ? ProductsController::listImportableServerTypes($selectedAccountId) : [],
+                    'product_groups' => ProductsController::listProductGroups(),
+                ]);
                 break;
 
             case 'resources':
-                echo $renderer->renderPage('resources', 'admin/resources', []);
+                echo $renderer->renderPage('resources', 'admin/resources', [
+                    'resources' => ResourcesController::listAll(),
+                    'accounts' => Capsule::table('mod_hetzner_cloud_accounts')->where('is_active', 1)->get(),
+                ]);
                 break;
 
             case 'snapshots':
-                echo $renderer->renderPage('snapshots', 'admin/snapshots', []);
+                echo $renderer->renderPage('snapshots', 'admin/snapshots', [
+                    'snapshot_data' => SnapshotsController::listAll(),
+                    'accounts' => Capsule::table('mod_hetzner_cloud_accounts')->where('is_active', 1)->get(),
+                ]);
                 break;
 
             case 'dashboard':
