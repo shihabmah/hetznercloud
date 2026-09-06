@@ -451,6 +451,53 @@ function hetzner_cloud_manager_ChangePackage(array $params)
 }
 
 /**
+ * Renders the full AJAX-powered client dashboard (templates/clientarea.tpl).
+ * The heavy lifting (power actions, console, rescue, rebuild, PTR,
+ * firewalls, snapshots) happens client-side via fetch() calls to
+ * clientarea.php - this function just supplies the initial template
+ * variables and a fresh CSRF token for that endpoint.
+ */
+function hetzner_cloud_manager_ClientArea(array $params)
+{
+    try {
+        $instance = Capsule::table('mod_hetzner_cloud_instances')->where('service_id', $params['serviceid'])->first();
+
+        if (!\WHMCS\Session::get('hcm_csrf_token')) {
+            \WHMCS\Session::set('hcm_csrf_token', bin2hex(random_bytes(32)));
+        }
+
+        return [
+            'templatefile' => 'clientarea',
+            'vars' => [
+                'serviceid' => $params['serviceid'],
+                'csrf_token' => \WHMCS\Session::get('hcm_csrf_token'),
+                'ajax_url' => $params['systemurl'] . 'modules/servers/hetzner_cloud_manager/clientarea.php',
+                'has_instance' => (bool) $instance,
+                'server_name' => $instance->server_name ?? null,
+                'allow_console' => ($params['configoption8'] ?? 'off') === 'on',
+                'allow_rescue' => ($params['configoption7'] ?? 'off') === 'on',
+                'allow_rebuild' => ($params['configoption6'] ?? 'off') === 'on',
+                'allow_ptr' => ($params['configoption9'] ?? 'off') === 'on',
+                'allow_firewall' => ($params['configoption10'] ?? 'off') === 'on',
+                'ipv4' => $instance->ipv4_address ?? null,
+                'ipv6' => $instance->ipv6_subnet ?? null,
+                'datacenter' => $instance->datacenter ?? null,
+                'server_type' => $instance->server_type ?? null,
+            ],
+        ];
+    } catch (\Exception $e) {
+        return [
+            'templatefile' => 'clientarea',
+            'vars' => [
+                'serviceid' => $params['serviceid'] ?? 0,
+                'has_instance' => false,
+                'error_message' => $e->getMessage(),
+            ],
+        ];
+    }
+}
+
+/**
  * Basic client-area power buttons available without JavaScript, shown
  * on the service's overview page above the custom clientarea.tpl output
  * (which provides the full AJAX-powered dashboard - see clientarea.php).
