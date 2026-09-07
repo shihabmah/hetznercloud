@@ -14,6 +14,11 @@ if (!defined('WHMCS')) {
     die('This file cannot be accessed directly');
 }
 
+// Global template helper functions (hcm_e etc.). These must be loaded
+// eagerly and must live in the global namespace, because .tpl files are
+// included by TemplateRenderer and execute in the global namespace.
+require_once __DIR__ . '/lib/helpers.php';
+
 spl_autoload_register(function (string $class) {
     $prefix = 'HetznerCloudManager\\';
 

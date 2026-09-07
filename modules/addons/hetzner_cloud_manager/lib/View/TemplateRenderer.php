@@ -77,25 +77,27 @@ class TemplateRenderer
     {
         extract($__data, EXTR_SKIP);
         ob_start();
-        include $__file;
+
+        try {
+            include $__file;
+        } catch (\Throwable $e) {
+            // Always discard the partial output before bubbling up, otherwise
+            // a broken template leaks half-rendered HTML into the admin page
+            // and leaves a dangling output buffer open.
+            ob_end_clean();
+            throw $e;
+        }
+
         return ob_get_clean();
     }
 
     /**
-     * Escape helper for use inside templates: `<?= e($value) ?>`.
+     * Escape helper, also available to templates as the global hcm_e()
+     * (see lib/helpers.php - templates run in the global namespace, so the
+     * helper cannot be declared inside this namespace).
      */
     public static function e($value): string
     {
-        return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
-    }
-}
-
-if (!function_exists('hcm_e')) {
-    /**
-     * Global shorthand escape helper available to all .tpl files.
-     */
-    function hcm_e($value): string
-    {
-        return TemplateRenderer::e($value);
+        return htmlspecialchars((string) ($value ?? ''), ENT_QUOTES, 'UTF-8');
     }
 }

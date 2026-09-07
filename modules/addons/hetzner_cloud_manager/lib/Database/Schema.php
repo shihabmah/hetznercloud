@@ -107,11 +107,24 @@ class Schema
             $table->integer('snapshot_limit')->default(1);
             $table->tinyInteger('backups_enabled')->default(0);
             $table->timestamp('created_at')->useCurrent();
-
-            $table->foreign('account_id')
-                ->references('id')->on('mod_hetzner_cloud_accounts')
-                ->onDelete('cascade');
+            $table->index('account_id');
         });
+
+        // The account_id -> accounts.id foreign key is a nice-to-have, not a
+        // requirement. Adding it in a separate, non-fatal step keeps the
+        // migration working on hosts where InnoDB FKs fail (MyISAM default
+        // storage engine, mismatched collations, or restricted grants) -
+        // AccountsController already refuses to delete an account that still
+        // has instances, so referential integrity is enforced in code too.
+        try {
+            Capsule::schema()->table('mod_hetzner_cloud_instances', function ($table) {
+                $table->foreign('account_id')
+                    ->references('id')->on('mod_hetzner_cloud_accounts')
+                    ->onDelete('cascade');
+            });
+        } catch (Exception $e) {
+            logActivity('Hetzner Cloud Manager: could not add account_id foreign key (non-fatal) - ' . $e->getMessage());
+        }
 
         return 'Created table mod_hetzner_cloud_instances';
     }

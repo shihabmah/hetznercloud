@@ -79,66 +79,60 @@ add_hook('DailyCronJob', 1, function ($vars) {
 });
 
 /**
- * Adds a lightweight admin homepage widget summarizing rate-limit
- * headroom and any out-of-stock server/location combinations, so
- * admins see capacity issues without opening the addon.
- */
-add_hook('AdminHomeWidgets', 1, function () {
-    if (!class_exists('WHMCS\\Admin\\Widget')) {
-        return null;
-    }
-
-    $outOfStock = StockAvailability::outOfStock(5);
-    $lowRateLimit = Capsule::table('mod_hetzner_cloud_accounts')
-        ->where('is_active', 1)
-        ->where('rate_limit_remaining', '<', 200)
-        ->get();
-
-    $html = '<ul class="list-unstyled mb-0">';
-    if (empty($outOfStock) && $lowRateLimit->isEmpty()) {
-        $html .= '<li class="text-muted">All Hetzner accounts and server stock look healthy.</li>';
-    }
-    foreach ($outOfStock as $row) {
-        $html .= '<li><span class="label label-danger">Out of stock</span> ' . htmlspecialchars($row->server_type) . ' @ ' . htmlspecialchars($row->location) . '</li>';
-    }
-    foreach ($lowRateLimit as $account) {
-        $html .= '<li><span class="label label-warning">Rate limit low</span> ' . htmlspecialchars($account->account_name) . ' (' . (int) $account->rate_limit_remaining . ' remaining)</li>';
-    }
-    $html .= '</ul>';
-
-    return \WHMCS\Admin\Widget::create('hetzner_cloud_manager_health')
-        ->setTitle('Hetzner Cloud Manager')
-        ->setWeight(200)
-        ->setColSpan(1)
-        ->setContent($html);
-});
-
-/**
  * Order-form guard: block checkout if the selected server_type/location
  * combination for a Hetzner Cloud Manager product is out of stock.
  * Reads the cached availability table (kept warm by DailyCronJob) so
  * this check is fast and does not call the live API on every page view.
+ *
+ * Returns an array of error strings (WHMCS's expected format) - or
+ * nothing at all when the cart is fine, so an empty value is never
+ * mistaken for a validation error.
  */
 add_hook('ShoppingCartValidateOrder', 1, function ($vars) {
-    foreach ($vars['products'] ?? [] as $product) {
-        if (empty($product['configoptions'])) {
-            continue;
+    $errors = [];
+
+    try {
+        $map = null;
+
+        foreach ($vars['products'] ?? [] as $product) {
+            if (empty($product['configoptions']) || !is_array($product['configoptions'])) {
+                continue;
+            }
+
+            $serverType = $product['configoptions']['ServerType']
+                ?? $product['configoptions']['Server Type']
+                ?? null;
+            $location = $product['configoptions']['Location'] ?? null;
+
+            if (!$serverType || !$location) {
+                continue;
+            }
+
+            // Load the cache lazily so carts with no Hetzner products cost
+            // nothing, and strip any "[Out of Stock]" suffix the product
+            // importer may have appended to a sub-option label.
+            $map = $map ?? StockAvailability::cachedMap();
+            $serverType = trim(preg_replace('/\s*\[.*?\]\s*$/', '', $serverType));
+            $location = trim(preg_replace('/\s*\[.*?\]\s*$/', '', $location));
+
+            // Default to allowing the order when we have no cached data yet -
+            // CreateAccount re-validates against the live API before it
+            // provisions anything, so nothing can actually be deployed into
+            // a sold-out pool.
+            $available = $map[$serverType][$location] ?? true;
+
+            if ($available === false) {
+                $errors[] = "Selected server flavor '{$serverType}' is currently out of capacity in location '{$location}'. Please select an alternative location.";
+            }
         }
-
-        $serverType = $product['configoptions']['ServerType'] ?? $product['configoptions']['Server Type'] ?? null;
-        $location = $product['configoptions']['Location'] ?? null;
-
-        if (!$serverType || !$location) {
-            continue;
-        }
-
-        $map = StockAvailability::cachedMap();
-        $available = $map[$serverType][$location] ?? true; // default open if uncached, StockChecker will block at provisioning time
-
-        if ($available === false) {
-            return "Selected server flavor '{$serverType}' is currently out of capacity in location '{$location}'. Please select an alternative location.";
-        }
+    } catch (\Exception $e) {
+        // Never block a customer's checkout because our stock cache had a
+        // problem; log it and let provisioning-time validation catch it.
+        logActivity('Hetzner Cloud Manager: cart stock validation skipped - ' . $e->getMessage());
+        return;
     }
 
-    return '';
+    if (!empty($errors)) {
+        return $errors;
+    }
 });

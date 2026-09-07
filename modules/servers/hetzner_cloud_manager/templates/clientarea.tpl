@@ -10,6 +10,13 @@
 {else}
 
 <div id="hcm-app" class="hcm-client-app" data-serviceid="{$serviceid}" data-csrf="{$csrf_token}" data-ajax-url="{$ajax_url}">
+    {* The CSS and JS below are wrapped in {literal} as a safeguard. Smarty 3+
+       (what WHMCS 8/9 ships) auto-detects literal braces, so this template
+       also compiles without it - but {literal} removes any dependence on that
+       heuristic, so adding e.g. a `{key: value}` object literal later cannot
+       silently break the client area. No Smarty variables appear inside these
+       blocks: the JS reads its config from the data-* attributes above. *}
+    {literal}
     <style>
         .hcm-client-app { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; }
         .hcm-panel { border: 1px solid #e2e5ec; border-radius: 8px; padding: 18px; margin-bottom: 16px; background: #fff; }
@@ -34,6 +41,7 @@
         .hcm-modal { background:#fff; border-radius:8px; padding:20px; max-width:640px; width:90%; max-height:85vh; overflow:auto; }
         .hcm-console-frame { width:100%; height:520px; border:1px solid #333; background:#000; }
     </style>
+    {/literal}
 
     <div class="hcm-panel">
         <div style="display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap;">
@@ -171,6 +179,7 @@
     </div>
 </div>
 
+{literal}
 <script>
 (function () {
     var app = document.getElementById('hcm-app');
@@ -370,5 +379,6 @@
     hcmRefreshStatus();
 })();
 </script>
+{/literal}
 
 {/if}

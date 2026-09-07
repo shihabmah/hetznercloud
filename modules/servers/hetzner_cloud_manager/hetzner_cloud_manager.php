@@ -110,7 +110,7 @@ function hetzner_cloud_manager_ConfigOptions()
 // an array suitable for a dropdown (value => label).
 // ---------------------------------------------------------------------
 
-function hetzner_cloud_manager_loadAccounts($params)
+function hetzner_cloud_manager_loadAccounts($params = [])
 {
     try {
         $accounts = Capsule::table('mod_hetzner_cloud_accounts')->where('is_active', 1)->get();
@@ -124,12 +124,11 @@ function hetzner_cloud_manager_loadAccounts($params)
     }
 }
 
-function hetzner_cloud_manager_loadServerTypes($params)
+function hetzner_cloud_manager_loadServerTypes($params = [])
 {
     try {
         $accountId = (int) ($params['configoption1'] ?? 0);
         $client = $accountId > 0 ? HetznerClient::forAccount($accountId) : HetznerClient::forAnyActiveAccount();
-        $stock = new StockAvailability($client);
 
         $options = [];
         foreach ($client->getServerTypes() as $type) {
@@ -159,7 +158,7 @@ function hetzner_cloud_manager_loadServerTypes($params)
     }
 }
 
-function hetzner_cloud_manager_loadLocations($params)
+function hetzner_cloud_manager_loadLocations($params = [])
 {
     try {
         $accountId = (int) ($params['configoption1'] ?? 0);
@@ -175,7 +174,7 @@ function hetzner_cloud_manager_loadLocations($params)
     }
 }
 
-function hetzner_cloud_manager_loadImages($params)
+function hetzner_cloud_manager_loadImages($params = [])
 {
     try {
         $accountId = (int) ($params['configoption1'] ?? 0);
@@ -215,7 +214,7 @@ function hetzner_cloud_manager_CreateAccount(array $params)
 {
     try {
         $serviceId = (int) $params['serviceid'];
-        $accountId = (int) $params['configoption1'];
+        $accountId = (int) ($params['configoption1'] ?? 0);
 
         if ($accountId <= 0) {
             return 'Provisioning Error: No Hetzner Cloud account is configured for this product. Set one on the Module Settings tab.';
@@ -226,7 +225,8 @@ function hetzner_cloud_manager_CreateAccount(array $params)
         $serverType = hetzner_cloud_manager_resolveOption($params, 'ServerType', 'configoption2');
         $location = hetzner_cloud_manager_resolveOption($params, 'Location', 'configoption3');
         $image = hetzner_cloud_manager_resolveOption($params, 'Image', 'configoption4');
-        $enableBackups = ($params['configoptions']['Backups'] ?? null) === 'Yes' || $params['configoption5'] === 'on';
+        $enableBackups = ($params['configoptions']['Backups'] ?? null) === 'Yes'
+            || ($params['configoption5'] ?? 'off') === 'on';
 
         if (!$serverType || !$location || !$image) {
             return 'Provisioning Error: Server type, location, and image must all be set (via product Module Settings or Configurable Options).';
