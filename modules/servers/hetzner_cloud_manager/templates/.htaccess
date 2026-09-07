@@ -1,0 +1,21 @@
+# Hetzner Cloud Manager - deny direct web access to template sources.
+#
+# These .tpl files contain PHP and are only ever loaded server-side by
+# lib/View/TemplateRenderer.php. Because .tpl is not normally mapped to the
+# PHP handler, a direct request would otherwise return the raw source as
+# plain text and disclose module internals.
+
+<IfModule mod_authz_core.c>
+    # Apache 2.4+
+    <FilesMatch "\.(tpl)$">
+        Require all denied
+    </FilesMatch>
+</IfModule>
+
+<IfModule !mod_authz_core.c>
+    # Apache 2.2
+    <FilesMatch "\.(tpl)$">
+        Order allow,deny
+        Deny from all
+    </FilesMatch>
+</IfModule>
